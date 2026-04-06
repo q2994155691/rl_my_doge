@@ -526,6 +526,27 @@ if(SYSTEM_TYPE STREQUAL "Linux")
     endif()
 endif()
 
+# executable for rl real opus
+if(SYSTEM_TYPE STREQUAL "Linux")
+    add_executable(rl_real_opus src/rl_real_opus.cpp)
+    target_include_directories(rl_real_opus PRIVATE
+        /home/luis/test_motor_thread/include
+        /usr/include/jsoncpp
+    )
+    target_link_libraries(rl_real_opus
+        unitree_sdk2
+        rl_sdk
+        observation_buffer
+        ${YAML_CPP_LIBRARIES}
+        jsoncpp
+        /home/luis/test_motor_thread/lib/libUnitreeMotorSDK_Linux64.so
+    )
+    set_target_properties(rl_real_opus PROPERTIES
+        INSTALL_RPATH "${CMAKE_INSTALL_RPATH};${CMAKE_CURRENT_SOURCE_DIR}/library/thirdparty/robot_sdk/unitree/unitree_sdk2/thirdparty/lib/${ARCH_DIR};/home/luis/test_motor_thread/lib"
+        BUILD_RPATH "/home/luis/test_motor_thread/lib"
+    )
+endif()
+
 # executable for rl real l4w4
 if(SYSTEM_TYPE STREQUAL "Linux")
     add_executable(rl_real_l4w4 src/rl_real_l4w4.cpp)
