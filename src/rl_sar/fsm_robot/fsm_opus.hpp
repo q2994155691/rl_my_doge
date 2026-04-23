@@ -109,6 +109,10 @@ public:
             {
                 return "RLFSMStateSineTest";
             }
+            else if (rl.control.current_keyboard == Input::Keyboard::Num3)
+            {
+                return "RLFSMStateTrot";
+            }
             else if (rl.control.current_keyboard == Input::Keyboard::Num9 || rl.control.current_gamepad == Input::Gamepad::B)
             {
                 return "RLFSMStateGetDown";
@@ -219,6 +223,73 @@ public:
     }
 };
 
+class RLFSMStateTrot : public RLFSMState
+{
+public:
+    RLFSMStateTrot(RL *rl) : RLFSMState(*rl, "RLFSMStateTrot") {}
+
+    float gait_phase = 0.0f;
+    const float phase_offset[4] = {0.0f, 0.5f, 0.5f, 0.0f}; // FR, FL, RR, RL (diagonal sync)
+    const float gait_freq = 2.0f;   // Hz
+    const float swing_amp = 0.2f;   // rad
+
+    void Enter() override
+    {
+        gait_phase = 0.0f;
+        std::cout << LOGGER::NOTE << "Entered Trot mode. Press 'P' to pause, '9' to get down." << std::endl;
+    }
+
+    void Run() override
+    {
+        float dt = rl.params.Get<float>("dt");
+        gait_phase = std::fmod(gait_phase + gait_freq * dt, 1.0f);
+
+        auto default_pos = rl.params.Get<std::vector<float>>("default_dof_pos");
+        auto kp = rl.params.Get<std::vector<float>>("fixed_kp");
+        auto kd = rl.params.Get<std::vector<float>>("fixed_kd");
+        int n = rl.params.Get<int>("num_of_dofs");
+
+        for (int leg = 0; leg < 4; ++leg)
+        {
+            float lp = std::fmod(gait_phase + phase_offset[leg], 1.0f);
+            float s = std::sin(2.0f * M_PI * lp);
+            int b = leg * 3;
+
+            if (b + 0 < n) fsm_command->motor_command.q[b + 0] = default_pos[b + 0];
+            if (b + 1 < n) fsm_command->motor_command.q[b + 1] = default_pos[b + 1] + swing_amp * s;
+            if (b + 2 < n) fsm_command->motor_command.q[b + 2] = default_pos[b + 2] - swing_amp * s;
+
+            for (int j = 0; j < 3; ++j)
+            {
+                int idx = b + j;
+                if (idx >= n) break;
+                fsm_command->motor_command.dq[idx]  = 0.0f;
+                fsm_command->motor_command.tau[idx] = 0.0f;
+                fsm_command->motor_command.kp[idx]  = kp[idx];
+                fsm_command->motor_command.kd[idx]  = kd[idx];
+            }
+        }
+
+        std::cout << "\r\033[K" << std::flush << LOGGER::INFO
+                  << "Trot phase: " << std::fixed << std::setprecision(2) << gait_phase << std::flush;
+    }
+
+    void Exit() override {}
+
+    std::string CheckChange() override
+    {
+        if (rl.control.current_keyboard == Input::Keyboard::P || rl.control.current_gamepad == Input::Gamepad::LB_X)
+        {
+            return "RLFSMStatePassive";
+        }
+        else if (rl.control.current_keyboard == Input::Keyboard::Num9 || rl.control.current_gamepad == Input::Gamepad::B)
+        {
+            return "RLFSMStateGetDown";
+        }
+        return state_name_;
+    }
+};
+
 class RLFSMStateRLLocomotion : public RLFSMState
 {
 public:
@@ -302,6 +373,8 @@ public:
             return std::make_shared<opus_fsm::RLFSMStateGetDown>(rl);
         else if (state_name == "RLFSMStateSineTest")
             return std::make_shared<opus_fsm::RLFSMStateSineTest>(rl);
+        else if (state_name == "RLFSMStateTrot")
+            return std::make_shared<opus_fsm::RLFSMStateTrot>(rl);
         else if (state_name == "RLFSMStateRLLocomotion")
             return std::make_shared<opus_fsm::RLFSMStateRLLocomotion>(rl);
         return nullptr;
@@ -314,6 +387,7 @@ public:
             "RLFSMStateGetUp",
             "RLFSMStateGetDown",
             "RLFSMStateSineTest",
+            "RLFSMStateTrot",
             "RLFSMStateRLLocomotion"
         };
     }
