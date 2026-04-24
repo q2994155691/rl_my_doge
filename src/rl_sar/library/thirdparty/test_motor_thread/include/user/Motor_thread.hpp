@@ -23,23 +23,23 @@ class MotorController {
 public:
     // A1-like layout: port N = leg N, motors [3N, 3N+1, 3N+2] = [hip, thigh, calf]
     std::vector<SerialGroup> serialGroups = {
-        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if03-port0", {0, 1}},  // FR leg: hip + thigh
-        /*{"<FL port>", {3, 4, 5}},
-        {"<RR port>", {6, 7, 8}},
+        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if03-port0", {0, 1, 2}},  // FR leg: hip + thigh + calf
+        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if02-port0", {3, 4, 5}},  // FL leg: hip + thigh + calf
+        /*{"<RR port>", {6, 7, 8}},
         {"<RL port>", {9, 10, 11}}*/
     };
     MotorController() {
         InitializeSerialPorts();
-        for(std::array<ThreadData, 1>::iterator td = threadData.begin(); td != threadData.end(); ++td) {
+        for(std::array<ThreadData, 3>::iterator td = threadData.begin(); td != threadData.end(); ++td) {
             td->start_time = std::chrono::high_resolution_clock::now();
         }
         // Start the motor control thread
         workerThreads[0] = std::thread(&MotorController::RunThread<0>, this);
-        /*workerThreads[1] = std::thread(&MotorController::RunThread<1>, this);
-        workerThreads[2] = std::thread(&MotorController::RunThread<2>, this);
+        workerThreads[1] = std::thread(&MotorController::RunThread<1>, this);
+        /*workerThreads[2] = std::thread(&MotorController::RunThread<2>, this);
         workerThreads[3] = std::thread(&MotorController::RunThread<3>, this);
         */
-        workerThreads[1] = std::thread(&MotorController::MonitorThread, this);
+        workerThreads[2] = std::thread(&MotorController::MonitorThread, this);
         std::cout << "Start motor thread： Done!" << std::endl;
     }
     ~MotorController() {
@@ -53,12 +53,12 @@ public:
         std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
     };
 
-    std::array<ThreadData, 2> threadData;
+    std::array<ThreadData, 3> threadData;
     std::mutex printMutex;
     std::atomic<bool> running{true};
     std::array<std::mutex, 10> motorMutexes;
     std::mutex fileMutex;
-    std::array<std::thread, 2> workerThreads; 
+    std::array<std::thread, 3> workerThreads;
 
     unitree_hg::msg::dds_::LowCmd_ current_cmd_;
     std::mutex cmd_mutex_;
@@ -83,10 +83,19 @@ public:
 
 public:
     /// Startq（0位偏移）： 左腿roll 内扣，则需增大，右腿内扣则需减小
-    std::array<float, 10> Startq ={0.0,  0.45 , 1.28,   0.86,  0.56,
-                                   0.8, 0.,  0.301131,  0.513495,  0.2};
+    // 趴姿校準（上電時姿態）：Startq[i] = -pre_running_pos[i]
+    // pre_running_pos = {0.00, 1.36, -2.65} per leg (hip, thigh, calf)
+    std::array<float, 10> Startq ={0.00, -1.36,  2.65,   0.00, -1.36,
+                                   2.65,  0.00, -1.36,   2.65,  0.00};
 
     //    std::array<float, 10> Startq ={0.,  0. , 0,   0.0,  0.0, 0.0, -0.0,  0.0,  0.0,  0.0};
+
+    // Per-motor direction sign (+1 or -1). Right-side legs (FR, RR) are physically
+    // mounted mirrored to left-side legs (FL, RL); the logical q convention is
+    // "q 增大 = 向站立方向" for left, so right-side motors need -1 to flip.
+    // Layout: FR hip, thigh, calf,  FL hip, thigh,  calf,  RR hip, thigh, calf,  RL hip
+    std::array<int, 10> Sign =    { 1,  -1,   -1,    +1,   +1,
+                                    +1,  -1,   -1,   -1,   +1};
 
     std::array<MotorData, 10> allMotorData;
     float Speed_Ratio = 6.33;
@@ -177,16 +186,18 @@ public:
         const bool is_special = IsSpecialMotor(motorID);
         const float ratio = is_special ? (Speed_Ratio * Gear_Ratio) : Speed_Ratio;
         
-        cmd.q = (dds_low_command.motor_cmd().at(motorID).q() + Startq[motorID]) * ratio;
-        cmd.dq = dds_low_command.motor_cmd().at(motorID).dq() * ratio;
+        const int sign = Sign[motorID];
+        cmd.q = sign * (dds_low_command.motor_cmd().at(motorID).q() + Startq[motorID]) * ratio;
+        cmd.dq = sign * dds_low_command.motor_cmd().at(motorID).dq() * ratio;
     }
 
     void ParseMotorFeedback(MotorData& data, int motorID) {
         const bool is_special = IsSpecialMotor(motorID);
         const float ratio = is_special ? (Speed_Ratio * Gear_Ratio) : Speed_Ratio;
-        
-        allMotorData.at(motorID).q = data.q / ratio - Startq[motorID];
-        allMotorData.at(motorID).dq = data.dq / ratio;
+        const int sign = Sign[motorID];
+
+        allMotorData.at(motorID).q = sign * data.q / ratio - Startq[motorID];
+        allMotorData.at(motorID).dq = sign * data.dq / ratio;
     }
 
     const std::array<MotorData, 10> &GetData() const {

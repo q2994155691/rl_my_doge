@@ -12,6 +12,28 @@
 namespace opus_fsm
 {
 
+inline void LogTarget(const char *phase, const RobotCommand<float> *fsm_command, const RobotState<float> *fsm_state)
+{
+    static auto last_log = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration<double>(now - last_log).count() >= 0.2)
+    {
+        last_log = now;
+        std::cout << LOGGER::INFO
+                  << phase
+                  << " tgt[0]=" << std::fixed << std::setprecision(3) << fsm_command->motor_command.q[0]
+                  << " [1]=" << fsm_command->motor_command.q[1]
+                  << " [2]=" << fsm_command->motor_command.q[2]
+                  << " | cur[0]=" << fsm_state->motor_state.q[0]
+                  << " [1]=" << fsm_state->motor_state.q[1]
+                  << " [2]=" << fsm_state->motor_state.q[2]
+                  << " | dq[0]=" << fsm_state->motor_state.dq[0]
+                  << " [1]=" << fsm_state->motor_state.dq[1]
+                  << " [2]=" << fsm_state->motor_state.dq[2]
+                  << std::endl;
+    }
+}
+
 class RLFSMStatePassive : public RLFSMState
 {
 public:
@@ -24,6 +46,20 @@ public:
 
     void Run() override
     {
+        static auto last_log = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration<double>(now - last_log).count() >= 1.0)
+        {
+            last_log = now;
+            int n = rl.params.Get<int>("num_of_dofs");
+            std::cout << LOGGER::INFO << "Passive encoder q (logical):";
+            for (int i = 0; i < n; ++i)
+            {
+                std::cout << " [" << i << "]=" << std::fixed << std::setprecision(4) << fsm_state->motor_state.q[i];
+            }
+            std::cout << std::endl;
+        }
+
         for (int i = 0; i < rl.params.Get<int>("num_of_dofs"); ++i)
         {
             // fsm_command->motor_command.q[i] = fsm_state->motor_state.q[i];
@@ -82,12 +118,12 @@ public:
         if(stand_from_passive)
         {
 
-            if (Interpolate(percent_pre_getup, rl.now_state.motor_state.q, pre_running_pos, 1.0f, "Pre Getting up", true)) return;
-            if (Interpolate(percent_getup, pre_running_pos, rl.params.Get<std::vector<float>>("default_dof_pos"), 2.0f, "Getting up", true)) return;
+            if (Interpolate(percent_pre_getup, rl.now_state.motor_state.q, pre_running_pos, 1.0f, "Pre Getting up", true)) { LogTarget("PreGetUp", fsm_command, fsm_state); return; }
+            if (Interpolate(percent_getup, pre_running_pos, rl.params.Get<std::vector<float>>("default_dof_pos"), 2.0f, "Getting up", true)) { LogTarget("GetUp", fsm_command, fsm_state); return; }
         }
         else
         {
-            if (Interpolate(percent_getup, rl.now_state.motor_state.q, rl.params.Get<std::vector<float>>("default_dof_pos"), 1.0f, "Getting up", true)) return;
+            if (Interpolate(percent_getup, rl.now_state.motor_state.q, rl.params.Get<std::vector<float>>("default_dof_pos"), 1.0f, "Getting up", true)) { LogTarget("GetUp", fsm_command, fsm_state); return; }
         }
     }
 
@@ -270,8 +306,7 @@ public:
             }
         }
 
-        std::cout << "\r\033[K" << std::flush << LOGGER::INFO
-                  << "Trot phase: " << std::fixed << std::setprecision(2) << gait_phase << std::flush;
+        LogTarget("Trot", fsm_command, fsm_state);
     }
 
     void Exit() override {}
