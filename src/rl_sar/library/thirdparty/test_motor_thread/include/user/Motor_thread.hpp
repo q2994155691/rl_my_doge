@@ -23,23 +23,22 @@ class MotorController {
 public:
     // A1-like layout: port N = leg N, motors [3N, 3N+1, 3N+2] = [hip, thigh, calf]
     std::vector<SerialGroup> serialGroups = {
-        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if03-port0", {0, 1, 2}},  // FR leg: hip + thigh + calf
-        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if02-port0", {3, 4, 5}},  // FL leg: hip + thigh + calf
-        /*{"<RR port>", {6, 7, 8}},
-        {"<RL port>", {9, 10, 11}}*/
+        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if03-port0", {0, 1, 2}},   // FR leg: hip + thigh + calf
+        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if02-port0", {3, 4, 5}},   // FL leg: hip + thigh + calf
+        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if01-port0", {6, 7, 8}},   // RR leg: hip + thigh + calf
+        {"/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTC04K70-if00-port0", {9, 10, 11}}, // RL leg: hip + thigh + calf
     };
     MotorController() {
         InitializeSerialPorts();
-        for(std::array<ThreadData, 3>::iterator td = threadData.begin(); td != threadData.end(); ++td) {
+        for(std::array<ThreadData, 5>::iterator td = threadData.begin(); td != threadData.end(); ++td) {
             td->start_time = std::chrono::high_resolution_clock::now();
         }
         // Start the motor control thread
         workerThreads[0] = std::thread(&MotorController::RunThread<0>, this);
         workerThreads[1] = std::thread(&MotorController::RunThread<1>, this);
-        /*workerThreads[2] = std::thread(&MotorController::RunThread<2>, this);
+        workerThreads[2] = std::thread(&MotorController::RunThread<2>, this);
         workerThreads[3] = std::thread(&MotorController::RunThread<3>, this);
-        */
-        workerThreads[2] = std::thread(&MotorController::MonitorThread, this);
+        workerThreads[4] = std::thread(&MotorController::MonitorThread, this);
         std::cout << "Start motor thread： Done!" << std::endl;
     }
     ~MotorController() {
@@ -53,12 +52,12 @@ public:
         std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
     };
 
-    std::array<ThreadData, 3> threadData;
+    std::array<ThreadData, 5> threadData;
     std::mutex printMutex;
     std::atomic<bool> running{true};
-    std::array<std::mutex, 10> motorMutexes;
+    std::array<std::mutex, 12> motorMutexes;
     std::mutex fileMutex;
-    std::array<std::thread, 3> workerThreads;
+    std::array<std::thread, 5> workerThreads;
 
     unitree_hg::msg::dds_::LowCmd_ current_cmd_;
     std::mutex cmd_mutex_;
@@ -85,19 +84,22 @@ public:
     /// Startq（0位偏移）： 左腿roll 内扣，则需增大，右腿内扣则需减小
     // 趴姿校準（上電時姿態）：Startq[i] = -pre_running_pos[i]
     // pre_running_pos = {0.00, 1.36, -2.65} per leg (hip, thigh, calf)
-    std::array<float, 10> Startq ={0.00, -1.36,  2.65,   0.00, -1.36,
-                                   2.65,  0.00, -1.36,   2.65,  0.00};
-
-    //    std::array<float, 10> Startq ={0.,  0. , 0,   0.0,  0.0, 0.0, -0.0,  0.0,  0.0,  0.0};
+    // Layout: FR(0-2), FL(3-5), RR(6-8), RL(9-11)
+    std::array<float, 12> Startq = { 0.00, -1.36,  2.65,   // FR: hip, thigh, calf
+                                     0.00, -1.36,  2.65,   // FL: hip, thigh, calf
+                                     0.00, -1.36,  2.65,   // RR: hip, thigh, calf
+                                     0.00, -1.36,  2.65 }; // RL: hip, thigh, calf
 
     // Per-motor direction sign (+1 or -1). Right-side legs (FR, RR) are physically
     // mounted mirrored to left-side legs (FL, RL); the logical q convention is
     // "q 增大 = 向站立方向" for left, so right-side motors need -1 to flip.
-    // Layout: FR hip, thigh, calf,  FL hip, thigh,  calf,  RR hip, thigh, calf,  RL hip
-    std::array<int, 10> Sign =    { 1,  -1,   -1,    +1,   +1,
-                                    +1,  -1,   -1,   -1,   +1};
+    // Layout: FR(0-2), FL(3-5), RR(6-8), RL(9-11)
+    std::array<int, 12> Sign =    {  1,  -1,  -1,   // FR: hip, thigh, calf
+                                    +1,  +1,  +1,   // FL: hip, thigh, calf
+                                     1,  -1,  -1,   // RR: hip, thigh, calf (same as FR)
+                                    +1,  +1,  +1 }; // RL: hip, thigh, calf (same as FL)
 
-    std::array<MotorData, 10> allMotorData;
+    std::array<MotorData, 12> allMotorData;
     float Speed_Ratio = 6.33;
     float Gear_Ratio = 3.;
     std::vector<std::unique_ptr<SerialPort>> serialPorts;
@@ -164,13 +166,8 @@ public:
     }
 
     void PrintFeedback() {
-        for (int i = 0; i < 10; ++i) {
-            std::cout << "m" << i << ": ";
-            if (IsSpecialMotor(i)) {
-                std::cout << allMotorData[i].q;
-            } else {
-                std::cout << allMotorData[i].q;
-            }
+        for (int i = 0; i < 12; ++i) {
+            std::cout << "m" << i << ": " << allMotorData[i].q;
         }
         std::cout << std::endl;
     }
@@ -200,8 +197,7 @@ public:
         allMotorData.at(motorID).dq = sign * data.dq / ratio;
     }
 
-    const std::array<MotorData, 10> &GetData() const {
-
+    const std::array<MotorData, 12> &GetData() const {
         return allMotorData;
     }
 };
