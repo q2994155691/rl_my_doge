@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <sstream>
+#include <filesystem>
 #include <json/json.h>
 
 using namespace std;
@@ -13,7 +14,9 @@ public:
     IMUReader() {
         Py_Initialize();
         PyEval_InitThreads();
-        PyRun_SimpleString("import sys; sys.path.append('/home/luis/test_motor_thread/bin')");
+        const auto imu_python_path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "bin";
+        const std::string python_code = "import sys; sys.path.append('" + imu_python_path.string() + "')";
+        PyRun_SimpleString(python_code.c_str());
     }
 
     ~IMUReader() {

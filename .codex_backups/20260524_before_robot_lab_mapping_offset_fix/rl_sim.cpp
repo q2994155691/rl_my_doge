@@ -512,9 +512,7 @@ void RL_Sim::RunModel()
         this->obs.actions = this->Forward();
         this->ComputeOutput(this->obs.actions, this->output_dof_pos, this->output_dof_vel, this->output_dof_tau);
 
-        if (this->robot_name == "opus"
-            && (this->config_name == "robot_lab" || this->config_name == "legged_gym")
-            && this->episode_length_buf <= 5)
+        if (this->robot_name == "opus" && this->config_name == "robot_lab" && this->episode_length_buf <= 5)
         {
             const int num_dofs = this->params.Get<int>("num_of_dofs");
             const auto joint_names = this->params.Get<std::vector<std::string>>("joint_names");

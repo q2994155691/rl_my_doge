@@ -18,10 +18,10 @@ a1:
                   33.5, 33.5, 33.5,
                   33.5, 33.5, 33.5,
                   33.5, 33.5, 33.5]
-  default_dof_pos: [ 0.00, 0.80, -1.50,
-                     0.00, 0.80, -1.50,
-                     0.00, 0.80, -1.50,
-                     0.00, 0.80, -1.50]
+  default_dof_pos: [ 0.00, 1.36, -2.65,
+                     0.00, 1.36, -2.65,
+                     0.00, 1.36, -2.65,
+                     0.00, 1.36, -2.65,]
   joint_names: ["FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
                 "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
                 "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",

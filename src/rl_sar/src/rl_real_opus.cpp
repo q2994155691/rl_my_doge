@@ -5,6 +5,45 @@
 
 #include "rl_real_opus.hpp"
 
+#include <iomanip>
+
+namespace
+{
+template <typename T>
+void PrintVector(const std::string& label, const std::vector<T>& values)
+{
+    std::cout << "  " << label << ": [";
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        if (i > 0) std::cout << ", ";
+        std::cout << values[i];
+    }
+    std::cout << "]" << std::endl;
+}
+
+void PrintNamedVector(const std::string& label, const std::vector<std::string>& names, const std::vector<float>& values)
+{
+    std::cout << "  " << label << ":" << std::endl;
+    const size_t count = std::min(names.size(), values.size());
+    for (size_t i = 0; i < count; ++i)
+    {
+        std::cout << "    [" << std::setw(2) << i << "] "
+                  << std::setw(15) << names[i] << " = "
+                  << std::fixed << std::setprecision(4) << values[i] << std::endl;
+    }
+}
+
+std::vector<float> Difference(const std::vector<float>& lhs, const std::vector<float>& rhs)
+{
+    std::vector<float> out(std::min(lhs.size(), rhs.size()), 0.0f);
+    for (size_t i = 0; i < out.size(); ++i)
+    {
+        out[i] = lhs[i] - rhs[i];
+    }
+    return out;
+}
+} // namespace
+
 RL_Opus::RL_Opus()
 {
     // read params from yaml
@@ -81,11 +120,12 @@ void RL_Opus::GetState(RobotState<float> *state)
     auto ms = motor_state_buffer_.GetData();
     if (ms)
     {
+        const auto joint_mapping = this->params.Get<std::vector<int>>("joint_mapping");
         for (int i = 0; i < this->params.Get<int>("num_of_dofs"); ++i)
         {
-            state->motor_state.q[i]       = ms->q[i];
-            state->motor_state.dq[i]      = ms->dq[i];
-            state->motor_state.tau_est[i] = ms->tau_est[i];
+            state->motor_state.q[i]       = ms->q[joint_mapping[i]];
+            state->motor_state.dq[i]      = ms->dq[joint_mapping[i]];
+            state->motor_state.tau_est[i] = ms->tau_est[joint_mapping[i]];
         }
     }
 }
@@ -93,13 +133,14 @@ void RL_Opus::GetState(RobotState<float> *state)
 void RL_Opus::SetCommand(const RobotCommand<float> *command)
 {
     MotorCommand mc;
+    const auto joint_mapping = this->params.Get<std::vector<int>>("joint_mapping");
     for (int i = 0; i < this->params.Get<int>("num_of_dofs"); ++i)
     {
-        mc.q_target[i]  = command->motor_command.q[i];
-        mc.dq_target[i] = command->motor_command.dq[i];
-        mc.kp[i]        = command->motor_command.kp[i];
-        mc.kd[i]        = command->motor_command.kd[i];
-        mc.tau_ff[i]    = command->motor_command.tau[i];
+        mc.q_target[joint_mapping[i]]  = command->motor_command.q[i];
+        mc.dq_target[joint_mapping[i]] = command->motor_command.dq[i];
+        mc.kp[joint_mapping[i]]        = command->motor_command.kp[i];
+        mc.kd[joint_mapping[i]]        = command->motor_command.kd[i];
+        mc.tau_ff[joint_mapping[i]]    = command->motor_command.tau[i];
     }
     this->motor_command_buffer_.SetData(mc);
     //std::cout << "[SetCommand] q[0]=" << mc.q_target[0] << " kp[0]=" << mc.kp[0] << " kd[0]=" << mc.kd[0] << std::endl;
@@ -133,6 +174,52 @@ void RL_Opus::RunModel()
 
         this->obs.actions = this->Forward();
         this->ComputeOutput(this->obs.actions, this->output_dof_pos, this->output_dof_vel, this->output_dof_tau);
+
+        if (this->episode_length_buf <= 5)
+        {
+            const int num_dofs = this->params.Get<int>("num_of_dofs");
+            const auto joint_names = this->params.Get<std::vector<std::string>>("joint_names");
+            const auto joint_mapping = this->params.Get<std::vector<int>>("joint_mapping");
+            const auto default_dof_pos = this->params.Get<std::vector<float>>("default_dof_pos");
+
+            std::vector<std::string> policy_joint_names;
+            policy_joint_names.reserve(joint_mapping.size());
+            for (int raw_index : joint_mapping)
+            {
+                if (raw_index >= 0 && raw_index < static_cast<int>(joint_names.size()))
+                {
+                    policy_joint_names.push_back(joint_names[raw_index]);
+                }
+                else
+                {
+                    policy_joint_names.push_back("INVALID_MAPPING");
+                }
+            }
+
+            std::vector<float> raw_target(num_dofs, 0.0f);
+            for (int policy_index = 0; policy_index < static_cast<int>(joint_mapping.size())
+                 && policy_index < static_cast<int>(this->output_dof_pos.size()); ++policy_index)
+            {
+                const int raw_index = joint_mapping[policy_index];
+                if (raw_index >= 0 && raw_index < num_dofs)
+                {
+                    raw_target[raw_index] = this->output_dof_pos[policy_index];
+                }
+            }
+
+            std::cout << std::endl
+                      << LOGGER::NOTE << "[OPUS real RL debug] RL step " << this->episode_length_buf << std::endl;
+            PrintVector("joint_mapping(policy_index -> raw_motor_index)", joint_mapping);
+            PrintNamedVector("policy_q(robot_state order used by model)", policy_joint_names, this->obs.dof_pos);
+            PrintNamedVector("policy_dq(robot_state order used by model)", policy_joint_names, this->obs.dof_vel);
+            PrintNamedVector("default_dof_pos(policy order)", policy_joint_names, default_dof_pos);
+            PrintNamedVector("q_minus_default(policy order)", policy_joint_names, Difference(this->obs.dof_pos, default_dof_pos));
+            PrintNamedVector("action(policy order)", policy_joint_names, this->obs.actions);
+            PrintNamedVector("target(policy order)", policy_joint_names, this->output_dof_pos);
+            PrintNamedVector("target_raw(raw motor order after SetCommand mapping)", joint_names, raw_target);
+            PrintVector("imu_quat_wxyz", this->obs.base_quat);
+            PrintVector("ang_vel", this->obs.ang_vel);
+        }
 
         if (!this->output_dof_pos.empty())
         {
@@ -234,10 +321,10 @@ unitree_hg::msg::dds_::LowCmd_ RL_Opus::SetMotorCmd()
     return cmd;
 }
 
-void RL_Opus::RecordMotorState(const std::array<MotorData, 10> &data)
+void RL_Opus::RecordMotorState(const std::array<MotorData, 12> &data)
 {
     MotorState ms_tmp;
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < 12; ++i)
     {
         ms_tmp.q[i]       = data[i].q;
         ms_tmp.dq[i]      = data[i].dq;

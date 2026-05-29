@@ -47,7 +47,7 @@ private:
 
     // motor thread
     void JointStateReadWriter();
-    void RecordMotorState(const std::array<MotorData, 10> &data);
+    void RecordMotorState(const std::array<MotorData, 12> &data);
     unitree_hg::msg::dds_::LowCmd_ SetMotorCmd();
 
     // loop

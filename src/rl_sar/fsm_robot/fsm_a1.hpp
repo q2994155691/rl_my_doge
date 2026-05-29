@@ -161,7 +161,10 @@ public:
     const float phase_offset[4] = {0.0f, 0.5f, 0.5f, 0.0f}; // FR, FL, RR, RL (diagonal sync)
     const float gait_freq  = 2.0f;   // Hz
     const float control_dt = 0.005f; // 200Hz
-    const float swing_amp  = 0.2f;   // rad
+    const float swing_amp  = 0.15f;   // rad
+    const float lateral_amp = 0.12f; // rad
+    const float yaw_stride_amp = 0.12f; // rad
+    const float yaw_hip_amp = 0.06f; // rad
 
     void Enter() override
     {
@@ -176,16 +179,23 @@ public:
         auto default_pos = rl.params.Get<std::vector<float>>("default_dof_pos");
         auto kp = rl.params.Get<std::vector<float>>("fixed_kp");
         auto kd = rl.params.Get<std::vector<float>>("fixed_kd");
+        float x_cmd = std::max(-1.0f, std::min(1.0f, rl.control.x));
+        float y_cmd = std::max(-1.0f, std::min(1.0f, rl.control.y));
+        float yaw_cmd = std::max(-1.0f, std::min(1.0f, rl.control.yaw));
 
         for (int leg = 0; leg < 4; ++leg)
         {
             float lp = std::fmod(gait_phase + phase_offset[leg], 1.0f);
             float s = std::sin(2.0f * M_PI * lp);
             int b = leg * 3;
+            float side = (leg == 0 || leg == 2) ? -1.0f : 1.0f;
+            float front_back = (leg < 2) ? 1.0f : -1.0f;
+            float stride = -swing_amp * x_cmd + side * yaw_stride_amp * yaw_cmd;
+            float hip_swing = side * lateral_amp * y_cmd * s + front_back * yaw_hip_amp * yaw_cmd * s;
 
-            fsm_command->motor_command.q[b + 0] = default_pos[b + 0];
-            fsm_command->motor_command.q[b + 1] = default_pos[b + 1] + swing_amp * s;
-            fsm_command->motor_command.q[b + 2] = default_pos[b + 2] - swing_amp * s;
+            fsm_command->motor_command.q[b + 0] = default_pos[b + 0] + hip_swing;
+            fsm_command->motor_command.q[b + 1] = default_pos[b + 1] + stride * s;
+            fsm_command->motor_command.q[b + 2] = default_pos[b + 2] - stride * s;
 
             for (int j = 0; j < 3; ++j)
             {
@@ -197,7 +207,8 @@ public:
         }
 
         std::cout << "\r\033[K" << std::flush << LOGGER::INFO
-                  << "Trot phase: " << std::fixed << std::setprecision(2) << gait_phase << std::flush;
+                  << "Trot phase: " << std::fixed << std::setprecision(2) << gait_phase
+                  << " x:" << x_cmd << " y:" << y_cmd << " yaw:" << yaw_cmd << std::flush;
     }
 
     void Exit() override {}

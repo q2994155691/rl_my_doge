@@ -7,7 +7,7 @@
 
 
 #include <unitree/idl/hg/LowCmd_.hpp>
-const int G1_NUM_MOTOR = 10;
+const int G1_NUM_MOTOR = 12;
 
 struct MotorState {
     std::array<float, G1_NUM_MOTOR> q = {};

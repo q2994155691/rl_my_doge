@@ -579,6 +579,7 @@ if(NOT USE_CMAKE)
     elseif($ENV{ROS_DISTRO} MATCHES "foxy|humble")
         install(PROGRAMS
             scripts/actuator_net.py
+            scripts/imu_rviz2_visualizer.py
             DESTINATION lib/${PROJECT_NAME}
         )
     endif()

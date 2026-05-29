@@ -34,18 +34,6 @@ inline void LogTarget(const char *phase, const RobotCommand<float> *fsm_command,
     }
 }
 
-template <typename T>
-inline void LogIndexedVector(const char *label, const std::vector<T> &values)
-{
-    std::cout << "  " << label << ": [";
-    for (size_t i = 0; i < values.size(); ++i)
-    {
-        if (i > 0) std::cout << ", ";
-        std::cout << values[i];
-    }
-    std::cout << "]" << std::endl;
-}
-
 class RLFSMStatePassive : public RLFSMState
 {
 public:
@@ -58,20 +46,6 @@ public:
 
     void Run() override
     {
-        static auto last_log = std::chrono::steady_clock::now();
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration<double>(now - last_log).count() >= 1.0)
-        {
-            last_log = now;
-            int n = rl.params.Get<int>("num_of_dofs");
-            std::cout << LOGGER::INFO << "Passive encoder q (logical):";
-            for (int i = 0; i < n; ++i)
-            {
-                std::cout << " [" << i << "]=" << std::fixed << std::setprecision(4) << fsm_state->motor_state.q[i];
-            }
-            std::cout << std::endl;
-        }
-
         for (int i = 0; i < rl.params.Get<int>("num_of_dofs"); ++i)
         {
             // fsm_command->motor_command.q[i] = fsm_state->motor_state.q[i];
@@ -363,48 +337,12 @@ public:
         rl.episode_length_buf = 0;
 
         // read params from yaml
-        rl.config_name = "legged_gym";
+        rl.config_name = "robot_lab";
         std::string robot_config_path = rl.robot_name + "/" + rl.config_name;
         try
         {
             rl.InitRL(robot_config_path);
             rl.now_state = *fsm_state;
-
-            std::vector<float> stale_pos;
-            std::vector<float> stale_vel;
-            std::vector<float> stale_tau;
-            while (rl.output_dof_pos_queue.try_pop(stale_pos)) {}
-            while (rl.output_dof_vel_queue.try_pop(stale_vel)) {}
-            while (rl.output_dof_tau_queue.try_pop(stale_tau)) {}
-
-            const auto joint_mapping = rl.params.Get<std::vector<int>>("joint_mapping");
-            const auto rl_kp = rl.params.Get<std::vector<float>>("rl_kp");
-            const auto rl_kd = rl.params.Get<std::vector<float>>("rl_kd");
-            const int num_dofs = rl.params.Get<int>("num_of_dofs");
-            std::vector<float> enter_state_q(num_dofs, 0.0f);
-            std::vector<float> hold_policy_q(num_dofs, 0.0f);
-            std::vector<float> hold_raw_q(num_dofs, 0.0f);
-            for (int policy_index = 0; policy_index < num_dofs; ++policy_index)
-            {
-                const int raw_index = joint_mapping[policy_index];
-                if (policy_index < static_cast<int>(fsm_state->motor_state.q.size()))
-                {
-                    enter_state_q[policy_index] = fsm_state->motor_state.q[policy_index];
-                }
-                if (raw_index < 0 || raw_index >= static_cast<int>(fsm_state->motor_state.q.size()))
-                {
-                    continue;
-                }
-                hold_policy_q[policy_index] = fsm_state->motor_state.q[raw_index];
-                hold_raw_q[raw_index] = hold_policy_q[policy_index];
-            }
-
-            std::cout << std::endl
-                      << LOGGER::NOTE << "[OPUS RL Enter debug] Hold command preview" << std::endl;
-            LogIndexedVector("joint_mapping(policy_index -> raw_motor_index)", joint_mapping);
-            LogIndexedVector("state_q_seen_by_enter(index order before InitRL refresh)", enter_state_q);
-            LogIndexedVector("hold_command_q(policy order)", hold_policy_q);
-            LogIndexedVector("hold_command_q(raw motor order after SetCommand mapping)", hold_raw_q);
         }
         catch (const std::exception& e)
         {
@@ -421,13 +359,13 @@ public:
 
         if (!rl.rl_init_done) rl.rl_init_done = true;
 
+        std::cout << "\r\033[K" << std::flush << LOGGER::INFO << "RL Controller [" << rl.config_name << "] x:" << rl.control.x << " y:" << rl.control.y << " yaw:" << rl.control.yaw << std::flush;
         RLControl();
     }
 
     void Exit() override
     {
         rl.rl_init_done = false;
-        rl.ReadYaml(rl.robot_name, "base.yaml");
     }
 
     std::string CheckChange() override

@@ -58,6 +58,7 @@ public:
     std::array<std::mutex, 12> motorMutexes;
     std::mutex fileMutex;
     std::array<std::thread, 5> workerThreads;
+    std::array<float, 12> rawMotorQ = {};
 
     unitree_hg::msg::dds_::LowCmd_ current_cmd_;
     std::mutex cmd_mutex_;
@@ -85,10 +86,10 @@ public:
     // 趴姿校準（上電時姿態）：Startq[i] = -pre_running_pos[i]
     // pre_running_pos = {0.00, 1.36, -2.65} per leg (hip, thigh, calf)
     // Layout: FR(0-2), FL(3-5), RR(6-8), RL(9-11)
-    std::array<float, 12> Startq = { 0.00, -1.36,  2.65,   // FR: hip, thigh, calf
-                                     0.00, -1.36,  2.65,   // FL: hip, thigh, calf
-                                     0.00, -1.36,  2.65,   // RR: hip, thigh, calf
-                                     0.00, -1.36,  2.65 }; // RL: hip, thigh, calf
+    std::array<float, 12> Startq = { 1.011058, 1.281201, -2.444139,   // FR: hip, thigh, calf
+                                    -0.189573, -0.807788, 2.900948,   // FL: hip, thigh, calf
+                                    -0.315956, 1.737757, -2.541043,   // RR: hip, thigh, calf
+                                     1.484992, -0.372828, 2.905213 }; // RL: hip, thigh, calf
 
     // Per-motor direction sign (+1 or -1). Right-side legs (FR, RR) are physically
     // mounted mirrored to left-side legs (FL, RL); the logical q convention is
@@ -97,7 +98,7 @@ public:
     std::array<int, 12> Sign =    {  1,  -1,  -1,   // FR: hip, thigh, calf
                                     +1,  +1,  +1,   // FL: hip, thigh, calf
                                      1,  -1,  -1,   // RR: hip, thigh, calf (same as FR)
-                                    +1,  +1,  +1 }; // RL: hip, thigh, calf (same as FL)
+                                    1,  +1,  +1 }; // RL: hip, thigh, calf (same as FL)
 
     std::array<MotorData, 12> allMotorData;
     float Speed_Ratio = 6.33;
@@ -137,6 +138,28 @@ public:
             }
             td.count++;
           }
+    }
+
+    template<int N>
+    void PrintMotorQ() {
+        static auto last_raw_log = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration<double>(now - last_raw_log).count() < 1.0) {
+            return;
+        }
+        last_raw_log = now;
+
+        std::cout << "[Motor raw q]";
+        for (int motorID : serialGroups[N].motorIDs) {
+            std::cout << " id=" << motorID
+                      << " raw_q=" << std::fixed << std::setprecision(4) << rawMotorQ[motorID];
+        }
+        std::cout << " [Motor logic q]";
+        for (int motorID : serialGroups[N].motorIDs) {
+            std::cout << " id=" << motorID
+                      << " logic_q=" << std::fixed << std::setprecision(6) << allMotorData[motorID].q;
+        }
+        std::cout << std::endl;
     }
 
     void MonitorThread() {
@@ -184,8 +207,8 @@ public:
         const float ratio = is_special ? (Speed_Ratio * Gear_Ratio) : Speed_Ratio;
         
         const int sign = Sign[motorID];
-        cmd.q = sign * (dds_low_command.motor_cmd().at(motorID).q() + Startq[motorID]) * ratio;
-        cmd.dq = sign * dds_low_command.motor_cmd().at(motorID).dq() * ratio;
+        cmd.q = (dds_low_command.motor_cmd().at(motorID).q() * sign + Startq[motorID]) * ratio;
+        cmd.dq = dds_low_command.motor_cmd().at(motorID).dq() * sign * ratio;
     }
 
     void ParseMotorFeedback(MotorData& data, int motorID) {
@@ -193,8 +216,9 @@ public:
         const float ratio = is_special ? (Speed_Ratio * Gear_Ratio) : Speed_Ratio;
         const int sign = Sign[motorID];
 
-        allMotorData.at(motorID).q = sign * data.q / ratio - Startq[motorID];
-        allMotorData.at(motorID).dq = sign * data.dq / ratio;
+        rawMotorQ.at(motorID) = data.q;
+        allMotorData.at(motorID).q = (data.q / ratio - Startq[motorID]) * sign;
+        allMotorData.at(motorID).dq = data.dq / ratio * sign;
     }
 
     const std::array<MotorData, 12> &GetData() const {

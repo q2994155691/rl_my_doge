@@ -129,9 +129,12 @@ def read_imu_data(port="/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Br
             #print("Accelerometer_X(m/s^2) : " + str(IMU_DATA[3]))
             #print("Accelerometer_Y(m/s^2) : " + str(IMU_DATA[4]))
             #print("Accelerometer_Z(m/s^2) : " + str(IMU_DATA[5]))
+            result["RollSpeed"]=IMU_DATA[0]
+            result["PitchSpeed"]=-IMU_DATA[1]
+            result["HeadingSpeed"]=-IMU_DATA[2]
             result["Accelerometer_X"]=IMU_DATA[3]
-            result["Accelerometer_Y"]=IMU_DATA[4]
-            result["Accelerometer_Z"]=IMU_DATA[5]
+            result["Accelerometer_Y"]=-IMU_DATA[4]
+            result["Accelerometer_Z"]=-IMU_DATA[5]
             temp1=True
 
         # 读取并解析AHRS数据
@@ -164,11 +167,8 @@ def read_imu_data(port="/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Br
             # result["qy"]=AHRS_DATA[8]
             # result["qz"]=AHRS_DATA[9]
 
-            #改位置
-            result["RollSpeed"]= AHRS_DATA[1]
-            result["PitchSpeed"]=AHRS_DATA[0] * -1
-            result["HeadingSpeed"]=AHRS_DATA[2]
-
+            # quaternion follows fdilink_ahrs ROS1 device_type=1:
+            # RotZ(pi) * RotY(pi) * [w, x, y, z] * RotX(pi) = [w, x, -y, -z]
             r = AHRS_DATA[4]
             p = AHRS_DATA[3] * -1
             h = AHRS_DATA[5]
@@ -195,8 +195,8 @@ def read_imu_data(port="/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Br
 
             result["qw"]=AHRS_DATA[6]
             result["qx"]=AHRS_DATA[7]
-            result["qy"]=AHRS_DATA[8]
-            result["qz"]=AHRS_DATA[9]
+            result["qy"]=-AHRS_DATA[8]
+            result["qz"]=-AHRS_DATA[9]
             temp2=True
 
         # result = {
