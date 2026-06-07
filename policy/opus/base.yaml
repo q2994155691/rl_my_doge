@@ -31,3 +31,20 @@ opus:
                            "RR_hip_controller", "RR_thigh_controller", "RR_calf_controller",
                            "RL_hip_controller", "RL_thigh_controller", "RL_calf_controller"]
   joint_mapping: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  sbus_remote_enabled: true
+  sbus_remote_port: "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+  sbus_remote_raw_min: 200
+  sbus_remote_raw_center: 1000
+  sbus_remote_raw_max: 1800
+  sbus_remote_deadband: 20
+  sbus_remote_timeout: 0.25
+  sbus_remote_x_channel: 2
+  sbus_remote_y_channel: 4
+  sbus_remote_yaw_channel: 1
+  sbus_remote_ch5_channel: 5
+  sbus_remote_ch6_channel: 6
+  sbus_remote_up_threshold: 600
+  sbus_remote_down_threshold: 1400
+  sbus_remote_invert_x: false
+  sbus_remote_invert_y: true
+  sbus_remote_invert_yaw: true

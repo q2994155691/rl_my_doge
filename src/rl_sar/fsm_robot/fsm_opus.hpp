@@ -8,6 +8,7 @@
 
 #include "fsm.hpp"
 #include "rl_sdk.hpp"
+#include "sbus_remote.hpp"
 
 namespace opus_fsm
 {
@@ -86,6 +87,16 @@ public:
 
     std::string CheckChange() override
     {
+        if (opus_remote::Enabled(rl))
+        {
+            auto command = opus_remote::Update(rl);
+            if (command == opus_remote::Command::StandUp)
+            {
+                return "RLFSMStateGetUp";
+            }
+            return state_name_;
+        }
+
         if (rl.control.current_keyboard == Input::Keyboard::Num0 || rl.control.current_gamepad == Input::Gamepad::A)
         {
             return "RLFSMStateGetUp";
@@ -143,6 +154,27 @@ public:
 
     std::string CheckChange() override
     {
+        if (opus_remote::Enabled(rl))
+        {
+            auto command = opus_remote::Update(rl);
+            if (command == opus_remote::Command::Passive)
+            {
+                return "RLFSMStatePassive";
+            }
+            if (percent_getup >= 1.0f)
+            {
+                if (command == opus_remote::Command::RLMode)
+                {
+                    return "RLFSMStateRLLocomotion";
+                }
+                if (command == opus_remote::Command::GetDown)
+                {
+                    return "RLFSMStateGetDown";
+                }
+            }
+            return state_name_;
+        }
+
         if (rl.control.current_keyboard == Input::Keyboard::P || rl.control.current_gamepad == Input::Gamepad::LB_X)
         {
             return "RLFSMStatePassive";
@@ -192,6 +224,20 @@ public:
 
     std::string CheckChange() override
     {
+        if (opus_remote::Enabled(rl))
+        {
+            auto command = opus_remote::Update(rl);
+            if (command == opus_remote::Command::Passive || percent_getdown >= 1.0f)
+            {
+                return "RLFSMStatePassive";
+            }
+            if (command == opus_remote::Command::StandUp)
+            {
+                return "RLFSMStateGetUp";
+            }
+            return state_name_;
+        }
+
         if (rl.control.current_keyboard == Input::Keyboard::P || rl.control.current_gamepad == Input::Gamepad::LB_X || percent_getdown >= 1.0f)
         {
             return "RLFSMStatePassive";
@@ -259,6 +305,20 @@ public:
 
     std::string CheckChange() override
     {
+        if (opus_remote::Enabled(rl))
+        {
+            auto command = opus_remote::Update(rl);
+            if (command == opus_remote::Command::Passive)
+            {
+                return "RLFSMStatePassive";
+            }
+            if (command == opus_remote::Command::StandUp)
+            {
+                return "RLFSMStateGetUp";
+            }
+            return state_name_;
+        }
+
         if (rl.control.current_keyboard == Input::Keyboard::P || rl.control.current_gamepad == Input::Gamepad::LB_X)
         {
             return "RLFSMStatePassive";
@@ -338,6 +398,20 @@ public:
 
     std::string CheckChange() override
     {
+        if (opus_remote::Enabled(rl))
+        {
+            auto command = opus_remote::Update(rl);
+            if (command == opus_remote::Command::Passive)
+            {
+                return "RLFSMStatePassive";
+            }
+            if (command == opus_remote::Command::GetDown)
+            {
+                return "RLFSMStateGetDown";
+            }
+            return state_name_;
+        }
+
         if (rl.control.current_keyboard == Input::Keyboard::P || rl.control.current_gamepad == Input::Gamepad::LB_X)
         {
             return "RLFSMStatePassive";
@@ -432,6 +506,24 @@ public:
 
     std::string CheckChange() override
     {
+        if (opus_remote::Enabled(rl))
+        {
+            auto command = opus_remote::Update(rl);
+            if (command == opus_remote::Command::Passive)
+            {
+                return "RLFSMStatePassive";
+            }
+            if (command == opus_remote::Command::GetDown)
+            {
+                return "RLFSMStateGetDown";
+            }
+            if (command == opus_remote::Command::StandUp)
+            {
+                return "RLFSMStateGetUp";
+            }
+            return state_name_;
+        }
+
         if (rl.control.current_keyboard == Input::Keyboard::P || rl.control.current_gamepad == Input::Gamepad::LB_X)
         {
             return "RLFSMStatePassive";

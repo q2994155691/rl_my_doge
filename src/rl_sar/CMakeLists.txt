@@ -368,7 +368,10 @@ endif()
 add_library(motion_loader library/core/motion_loader/motion_loader.cpp)
 
 # library for rl sdk
-add_library(rl_sdk library/core/rl_sdk/rl_sdk.cpp)
+add_library(rl_sdk
+    library/core/rl_sdk/rl_sdk.cpp
+    fsm_robot/sbus_remote.cpp
+)
 target_link_libraries(rl_sdk PUBLIC
     motion_loader
     inference_runtime
