@@ -452,8 +452,8 @@ public:
             while (rl.output_dof_tau_queue.try_pop(stale_tau)) {}
 
             const auto joint_mapping = rl.params.Get<std::vector<int>>("joint_mapping");
-            const auto rl_kp = rl.params.Get<std::vector<float>>("rl_kp");
-            const auto rl_kd = rl.params.Get<std::vector<float>>("rl_kd");
+            const auto rl_kp = rl.params.Get<std::vector<float>>("rl_sim_kp");
+            const auto rl_kd = rl.params.Get<std::vector<float>>("rl_sim_kd");
             const int num_dofs = rl.params.Get<int>("num_of_dofs");
             std::vector<float> enter_state_q(num_dofs, 0.0f);
             std::vector<float> hold_policy_q(num_dofs, 0.0f);
@@ -469,12 +469,17 @@ public:
                 {
                     continue;
                 }
-                hold_policy_q[policy_index] = fsm_state->motor_state.q[raw_index];
-                hold_raw_q[raw_index] = hold_policy_q[policy_index];
+                fsm_command->motor_command.q[policy_index] = fsm_state->motor_state.q[raw_index];
+                fsm_command->motor_command.dq[policy_index] = 0.0f;
+                fsm_command->motor_command.kp[policy_index] = rl_kp[policy_index];
+                fsm_command->motor_command.kd[policy_index] = rl_kd[policy_index];
+                fsm_command->motor_command.tau[policy_index] = 0.0f;
+                hold_policy_q[policy_index] = fsm_command->motor_command.q[policy_index];
+                hold_raw_q[raw_index] = fsm_command->motor_command.q[policy_index];
             }
 
             std::cout << std::endl
-                      << LOGGER::NOTE << "[OPUS RL Enter debug] Hold command preview" << std::endl;
+                      << LOGGER::NOTE << "[OPUS RL Enter debug] Hold command applied" << std::endl;
             LogIndexedVector("joint_mapping(policy_index -> raw_motor_index)", joint_mapping);
             LogIndexedVector("state_q_seen_by_enter(index order before InitRL refresh)", enter_state_q);
             LogIndexedVector("hold_command_q(policy order)", hold_policy_q);
@@ -495,6 +500,7 @@ public:
 
         if (!rl.rl_init_done) rl.rl_init_done = true;
 
+        std::cout << "\r\033[K" << std::flush << LOGGER::INFO << "RL Controller [" << rl.config_name << "] x:" << rl.control.x << " y:" << rl.control.y << " yaw:" << rl.control.yaw << std::flush;
         RLControl();
     }
 
